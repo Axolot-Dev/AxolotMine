@@ -1,0 +1,9 @@
+# ╔════════════════════════════════════════════════════════════╗
+# ║                    AxolotMine Config                       ║
+# ║          Folia-Safe Mine Reset System v1.0.0               ║
+# ║              by SilentBit Development Team                ║
+# ╚════════════════════════════════════════════════════════════╝
+
+# Default reset interval for new mines (in seconds)
+# Minimum: 30 seconds
+default-reset-interval: 600

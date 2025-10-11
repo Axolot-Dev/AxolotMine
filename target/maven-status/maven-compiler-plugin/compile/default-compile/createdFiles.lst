@@ -1,0 +1,12 @@
+dev\silentbit\axolotMine\utils\MessageUtil.class
+dev\silentbit\axolotMine\AxolotMine.class
+dev\silentbit\axolotMine\tasks\MineResetTask.class
+dev\silentbit\axolotMine\utils\ConfigUtil.class
+dev\silentbit\axolotMine\AxolotMinePlaceholders.class
+dev\silentbit\axolotMine\models\Mine.class
+dev\silentbit\axolotMine\managers\WorldEditHandler.class
+dev\silentbit\axolotMine\managers\ConfigManager.class
+dev\silentbit\axolotMine\managers\WorldsHandler.class
+dev\silentbit\axolotMine\managers\MineManager.class
+dev\silentbit\axolotMine\commands\AxolotMineCommand.class
+dev\silentbit\axolotMine\utils\FoliaUtil.class
