@@ -1,10 +1,10 @@
 name: AxolotMine
 main: dev.silentbit.axolotMine.AxolotMine
-version: 1.0.0
+version: '${project.version}'
 api-version: '1.21'
 folia-supported: true
-author: SilentBit
-description: A Folia-safe mine reset plugin inspired by RealMines (Admin Only)
+author: [ Naruto99, Yutu_Friendly ]
+description: A Folia-safe mine reset plugin
 
 depend: [WorldEdit]
 softdepend: [PlaceholderAPI, Worlds]

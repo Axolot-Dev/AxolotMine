@@ -90,6 +90,7 @@ public class MessageUtil {
         defaultMessages.put("help-composition", "<gradient:#00ffaa:#00aaff>║</gradient> <yellow>/am comp <name> [add|remove]</yellow> <dark_gray>→</dark_gray> <gray>Edit blocks</gray>");
         defaultMessages.put("help-reload", "<gradient:#00ffaa:#00aaff>║</gradient> <yellow>/am reload</yellow> <dark_gray>→</dark_gray> <gray>Reload config</gray>");
         defaultMessages.put("help-footer", "<gradient:#00ffaa:#00aaff>╚═════════════════════════════════════╝</gradient>");
+        defaultMessages.put("mine-info-lastreset", "<gradient:#00ffaa:#00aaff>║</gradient> Last Reset: <gray><minutes> minutes ago</gray>");
     }
 
     public void sendMessage(CommandSender sender, String key) {

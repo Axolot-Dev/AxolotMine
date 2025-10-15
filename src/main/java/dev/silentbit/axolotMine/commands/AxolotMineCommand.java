@@ -311,7 +311,7 @@ public class AxolotMineCommand implements CommandExecutor, TabCompleter {
 
         if (mine == null) {
             plugin.getMessageUtil().sendMessage(sender, "mine-not-found",
-                    Map.of("name", mineName));
+                    Map.of("mine", mineName));
             return true;
         }
 
@@ -323,11 +323,11 @@ public class AxolotMineCommand implements CommandExecutor, TabCompleter {
             }
 
             mine.setResetInterval(interval);
-            plugin.getMineManager().saveMine(mine);
-            plugin.getMineManager().scheduleReset(mine);
+            plugin.getMineManager().saveMine(mine); // Save immediately
+            plugin.getMineManager().scheduleReset(mine); // Reschedule
 
             plugin.getMessageUtil().sendMessage(sender, "interval-set",
-                    Map.of("name", mineName, "interval", String.valueOf(interval)));
+                    Map.of("mine", mineName, "interval", String.valueOf(interval)));
 
         } catch (NumberFormatException e) {
             plugin.getMessageUtil().sendMessage(sender, "invalid-number");

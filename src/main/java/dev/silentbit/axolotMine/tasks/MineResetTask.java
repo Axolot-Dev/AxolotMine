@@ -23,10 +23,10 @@ public class MineResetTask implements Runnable {
 
     @Override
     public void run() {
-        // STEP 1: Teleport players out IMMEDIATELY (no warning)
+        // Teleport players out IMMEDIATELY (no warning)
         teleportPlayersOutOfMine();
 
-        // STEP 2: Reset the mine blocks
+        // Reset the mine blocks
         resetMineBlocks();
 
         plugin.getLogger().info("Mine '" + mine.getName() + "' has been reset!");

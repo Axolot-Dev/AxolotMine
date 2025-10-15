@@ -14,8 +14,6 @@ import org.bukkit.configuration.file.YamlConfiguration;
 import java.io.File;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
 
 public class MineManager {
 
@@ -39,8 +37,12 @@ public class MineManager {
         mines.clear();
 
         File[] files = minesFolder.listFiles((dir, name) -> name.endsWith(".yml"));
-        if (files == null) return;
+        if (files == null || files.length == 0) {
+            plugin.getLogger().info("No mines found to load.");
+            return;
+        }
 
+        int loaded = 0;
         for (File file : files) {
             try {
                 YamlConfiguration config = YamlConfiguration.loadConfiguration(file);
@@ -49,19 +51,30 @@ public class MineManager {
                 if (mine != null) {
                     mines.put(mine.getName(), mine);
                     scheduleReset(mine);
+                    loaded++;
                     plugin.getLogger().info("Loaded mine: " + mine.getName());
                 }
             } catch (Exception e) {
                 plugin.getLogger().severe("Failed to load mine from " + file.getName() + ": " + e.getMessage());
+                e.printStackTrace();
             }
         }
 
-        plugin.getLogger().info("Loaded " + mines.size() + " mine(s)");
+        plugin.getLogger().info("Loaded " + loaded + " mine(s) successfully!");
     }
 
     private Mine loadMineFromConfig(YamlConfiguration config) {
         String name = config.getString("name");
+        if (name == null) {
+            plugin.getLogger().warning("Mine has no name in config!");
+            return null;
+        }
+
         String worldName = config.getString("region.world");
+        if (worldName == null) {
+            plugin.getLogger().warning("Mine " + name + " has no world specified!");
+            return null;
+        }
 
         World world = plugin.getServer().getWorld(worldName);
         if (world == null) {
@@ -69,8 +82,22 @@ public class MineManager {
             return null;
         }
 
-        String[] pos1Parts = config.getString("region.pos1").split(",");
-        String[] pos2Parts = config.getString("region.pos2").split(",");
+        // Load positions
+        String pos1Str = config.getString("region.pos1");
+        String pos2Str = config.getString("region.pos2");
+
+        if (pos1Str == null || pos2Str == null) {
+            plugin.getLogger().warning("Mine " + name + " missing position data!");
+            return null;
+        }
+
+        String[] pos1Parts = pos1Str.split(",");
+        String[] pos2Parts = pos2Str.split(",");
+
+        if (pos1Parts.length < 3 || pos2Parts.length < 3) {
+            plugin.getLogger().warning("Mine " + name + " has invalid position format!");
+            return null;
+        }
 
         Location pos1 = new Location(world,
                 Integer.parseInt(pos1Parts[0]),
@@ -82,9 +109,11 @@ public class MineManager {
                 Integer.parseInt(pos2Parts[1]),
                 Integer.parseInt(pos2Parts[2]));
 
+        // Load reset interval
         int resetInterval = config.getInt("reset-interval",
                 plugin.getConfigManager().getDefaultResetInterval());
 
+        // Load composition
         Map<Material, Double> composition = new HashMap<>();
         ConfigurationSection compSection = config.getConfigurationSection("composition");
 
@@ -95,14 +124,24 @@ public class MineManager {
                     double percentage = compSection.getDouble(key);
                     composition.put(material, percentage);
                 } catch (IllegalArgumentException e) {
-                    plugin.getLogger().warning("Invalid material: " + key);
+                    plugin.getLogger().warning("Invalid material in mine " + name + ": " + key);
                 }
             }
         }
 
+        if (composition.isEmpty()) {
+            plugin.getLogger().warning("Mine " + name + " has no composition! Using defaults.");
+            composition.put(Material.STONE, 100.0);
+        }
+
+        // Create mine object
         Mine mine = new Mine(name, worldName, pos1, pos2, resetInterval, composition);
 
-        // NEW: Load spawn point if it exists
+        // IMPORTANT: Load last reset time from config
+        long lastReset = config.getLong("last-reset", System.currentTimeMillis());
+        mine.setLastReset(lastReset);
+
+        // Load spawn point if it exists
         if (config.contains("spawn-point")) {
             String spawnStr = config.getString("spawn-point");
             if (spawnStr != null && !spawnStr.isEmpty()) {
@@ -126,11 +165,15 @@ public class MineManager {
         config.set("region.pos2", ConfigUtil.locationToString(mine.getPos2()));
         config.set("reset-interval", mine.getResetInterval());
 
-        // NEW: Save spawn point if set
+        // IMPORTANT: Save last reset timestamp
+        config.set("last-reset", mine.getLastReset());
+
+        // Save spawn point if set
         if (mine.hasSpawnPoint()) {
             config.set("spawn-point", ConfigUtil.locationToFullString(mine.getSpawnPoint()));
         }
 
+        // Save composition
         ConfigurationSection compSection = config.createSection("composition");
         for (Map.Entry<Material, Double> entry : mine.getComposition().entrySet()) {
             compSection.set(entry.getKey().name(), entry.getValue());
@@ -140,6 +183,7 @@ public class MineManager {
             config.save(file);
         } catch (Exception e) {
             plugin.getLogger().severe("Failed to save mine " + mine.getName() + ": " + e.getMessage());
+            e.printStackTrace();
         }
     }
 
@@ -170,7 +214,9 @@ public class MineManager {
             task.run();
         }
 
+        // Update last reset time and save
         mine.setLastReset(System.currentTimeMillis());
+        saveMine(mine);
     }
 
     public void scheduleReset(Mine mine) {
@@ -180,20 +226,42 @@ public class MineManager {
             existingTask.cancel();
         }
 
-        // Schedule new reset task
+        // Calculate time until next reset
+        long currentTime = System.currentTimeMillis();
+        long timeSinceLastReset = currentTime - mine.getLastReset();
+        long resetIntervalMs = mine.getResetInterval() * 1000L;
+        long timeUntilNextReset = resetIntervalMs - timeSinceLastReset;
+
+        // If reset time has already passed (server was offline), reset immediately
+        if (timeUntilNextReset <= 0) {
+            plugin.getLogger().info("Mine '" + mine.getName() + "' was due for reset during downtime. Resetting now...");
+            resetMine(mine, true);
+
+            // Schedule the next reset after this one
+            scheduleReset(mine);
+            return;
+        }
+
+        // Schedule reset at the calculated time
         Location center = mine.getPos1().clone().add(mine.getPos2()).multiply(0.5);
+
+        // Convert milliseconds to ticks (1 second = 20 ticks)
+        long delayTicks = timeUntilNextReset / 50; // 50ms per tick
 
         ScheduledTask task = plugin.getServer().getRegionScheduler().runDelayed(
                 plugin,
                 center,
                 scheduledTask -> {
                     resetMine(mine, false);
-                    scheduleReset(mine); // Reschedule
+                    scheduleReset(mine); // Reschedule for next reset
                 },
-                mine.getResetInterval() * 20L // Convert seconds to ticks
+                delayTicks
         );
 
         resetTasks.put(mine.getName(), task);
+
+        plugin.getLogger().info("Scheduled reset for mine '" + mine.getName() + "' in " +
+                (timeUntilNextReset / 1000) + " seconds");
     }
 
     public void deleteMine(String name) {
@@ -223,35 +291,25 @@ public class MineManager {
         return mines.containsKey(name);
     }
 
-    public void shutdown() {
-        for (ScheduledTask task : resetTasks.values()) {
-            task.cancel();
-        }
-        resetTasks.clear();
-    }
-
     public void resetAllMines() {
         for (Mine mine : mines.values()) {
             resetMine(mine, true);
         }
     }
 
-    public List<Mine> getMinesByWorld(String worldName) {
-        return mines.values().stream()
-                .filter(mine -> mine.getWorldName().equals(worldName))
-                .collect(Collectors.toList());
-    }
+    public void shutdown() {
+        // Save all mines before shutdown
+        plugin.getLogger().info("Saving all mines...");
+        for (Mine mine : mines.values()) {
+            saveMine(mine);
+        }
 
-    public Mine getNearestMine(org.bukkit.Location location) {
-        return mines.values().stream()
-                .filter(mine -> mine.getWorldName().equals(location.getWorld().getName()))
-                .min((m1, m2) -> {
-                    double dist1 = location.distance(
-                            m1.getPos1().clone().add(m1.getPos2()).multiply(0.5));
-                    double dist2 = location.distance(
-                            m2.getPos1().clone().add(m2.getPos2()).multiply(0.5));
-                    return Double.compare(dist1, dist2);
-                })
-                .orElse(null);
+        // Cancel all scheduled tasks
+        for (ScheduledTask task : resetTasks.values()) {
+            task.cancel();
+        }
+        resetTasks.clear();
+
+        plugin.getLogger().info("All mines saved and tasks cancelled!");
     }
 }

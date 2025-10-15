@@ -2,11 +2,12 @@ package dev.silentbit.axolotMine;
 
 import dev.silentbit.axolotMine.commands.AxolotMineCommand;
 import dev.silentbit.axolotMine.managers.*;
+import dev.silentbit.axolotMine.models.Mine;
 import dev.silentbit.axolotMine.utils.MessageUtil;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import org.bukkit.plugin.java.JavaPlugin;
 
-public final class  AxolotMine extends JavaPlugin {
+public final class AxolotMine extends JavaPlugin {
 
     private static AxolotMine instance;
     private MineManager mineManager;
@@ -70,8 +71,23 @@ public final class  AxolotMine extends JavaPlugin {
         // Load all mines
         mineManager.loadMines();
 
+        // Schedule periodic auto-save every 5 minutes
+        getServer().getGlobalRegionScheduler().runAtFixedRate(
+                this,
+                task -> {
+                    getLogger().info("Auto-saving all mines...");
+                    for (Mine mine : mineManager.getAllMines()) {
+                        mineManager.saveMine(mine);
+                    }
+                },
+                6000L, // Initial delay: 5 minutes (6000 ticks)
+                6000L  // Period: 5 minutes
+        );
+        getLogger().info("  ✓ Auto-save scheduled (every 5 minutes)");
+
         getLogger().info("┌─────────────────────────────────────────┐");
         getLogger().info("│  AxolotMine enabled successfully!       │");
+        getLogger().info("│  Command-Based | Admin-Only Mode        │");
         getLogger().info("└─────────────────────────────────────────┘");
     }
 
@@ -79,7 +95,7 @@ public final class  AxolotMine extends JavaPlugin {
     public void onDisable() {
         // Cancel all scheduled tasks and save data
         if (mineManager != null) {
-            getLogger().info("Shutting down mine reset tasks...");
+            getLogger().info("Shutting down mine reset tasks and saving data...");
             mineManager.shutdown();
         }
 
